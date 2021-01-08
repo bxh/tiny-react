@@ -68,6 +68,8 @@ const TinyReact = (function() {
         let oldvdom = oldDom && oldDom._virtualElement;
         if (!oldDom) {
             mountElement(vdom, container, oldDom);
+        } else if (typeof vdom.type === "function") {
+            diffComponent(vdom, null, container, oldDom);
         } else if(oldvdom && oldvdom.type === vdom.type) {
             if (oldvdom.type == "text") {
                 updateTextNode(oldDom, vdom, oldvdom);
@@ -98,8 +100,47 @@ const TinyReact = (function() {
         domElement._virtualElement = newVirtualElement;
     }
 
+    function diffComponent(newVirtualElement, oldComponent, container, domElement) {
+        if (!oldComponent) {
+            mountElement(newVirtualElement, container, domElement);
+        }
+    }
+
     const mountElement = function(vdom, container, oldDom) {
-        return mountSimpleNode(vdom, container, oldDom);
+        if (typeof vdom.type === "function") {
+            return mountComponent(vdom, container, oldDom);
+        } else {
+            return mountSimpleNode(vdom, container, oldDom);
+        }
+    }
+
+    const mountComponent = function(vdom, container, oldDom) {
+        let nextvDom = null, component = null, newDomElement = null;
+        if (isFunctionalComponent(vdom)) {
+            nextvDom = buildFunctionalComponent(vdom);
+        }
+
+        if (isFunction(nextvDom)) {
+            return mountComponent(nextvDom, container, oldDom);
+        } else {
+            newDomElement = mountElement(nextvDom, container, oldDom);
+        }
+
+        return newDomElement;
+    }
+
+    function isFunction(obj) {
+        return obj && "function" === typeof obj.type;
+    }
+
+    function isFunctionalComponent(vnode) {
+        let nodeType = vnode && vnode.type;
+        return nodeType && isFunction(vnode) 
+            && !(nodeType.prototype && nodeType.prototype.render);
+    }
+    
+    function buildFunctionalComponent(vnode, context) {
+        return vnode.type(vnode.props || {});
     }
 
     const mountSimpleNode = function(vdom, container, oldDom, parentComponent) {
@@ -115,6 +156,10 @@ const TinyReact = (function() {
 
         // Set reference to vdom to dom.
         newDomElement._virtualElement = vdom;
+
+        if (oldDom) {
+            unmountNode(oldDom, parentComponent);
+        }
 
         if (nextSibling) {
             container.insertBefore(newDomElement, nextSibling);
